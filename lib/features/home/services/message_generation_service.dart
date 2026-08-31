@@ -6,6 +6,9 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/message_part.dart';
 import '../../../core/models/conversation.dart';
 import '../../../core/providers/settings_provider.dart';
+import '../../../core/providers/workspace_provider.dart';
+import '../../../core/services/workspace/tools.dart';
+import '../../../core/services/workspace/models.dart';
 import '../../../core/services/api/builtin_tools.dart';
 import '../../../core/services/api/chat_api_service.dart';
 import '../../../core/services/chat/chat_service.dart';
@@ -91,11 +94,6 @@ class MessageGenerationService {
   final stream_ctrl.StreamController streamController;
   final BuildContext contextProvider;
 
-  /// Whether the bound workspace tools are exposed to the model in this
-  /// generation. Set by the chat UI when a workspace is attached.
-  bool _workspaceToolsEnabled = false;
-  set workspaceToolsEnabled(bool value) => _workspaceToolsEnabled = value;
-
   // Callbacks for UI updates (set by home_page)
   OnMessagesChanged? onMessagesChanged;
   OnConversationLoadingChanged? onConversationLoadingChanged;
@@ -110,6 +108,41 @@ class MessageGenerationService {
   /// Called when file processing finishes. A null [messageId] clears whichever
   /// message currently owns the indicator (error/cancel cleanup paths).
   void Function(String? messageId)? onFileProcessingFinished;
+
+  /// Attach or detach the workspace tools based on settings. Called right
+  /// before tool definitions are assembled for a generation.
+  Future<void> _syncWorkspaceBinding(SettingsProvider settings) async {
+    final enabled = settings.workspaceAgentEnabled;
+    final root = settings.workspaceActiveRoot;
+    if (!enabled || root == null || root.isEmpty) {
+      if (generationController.workspaceToolsEnabled) {
+        generationController.workspaceToolsEnabled = false;
+        generationController.bindWorkspace(null);
+      }
+      return;
+    }
+    final provider = contextProvider.read<WorkspaceProvider>();
+    await provider.load();
+    final manager = await provider.manager();
+    Workspace? ws;
+    for (final candidate in provider.workspaces) {
+      if (candidate.root == root) {
+        ws = candidate;
+        break;
+      }
+    }
+    if (ws == null || !manager.hasRootfs(root)) {
+      // Configured root is missing or rootfs not installed: keep tools off.
+      if (generationController.workspaceToolsEnabled) {
+        generationController.workspaceToolsEnabled = false;
+        generationController.bindWorkspace(null);
+      }
+      return;
+    }
+    final tools = WorkspaceTools.forRoot(root, manager: manager);
+    generationController.bindWorkspace(tools);
+    generationController.workspaceToolsEnabled = true;
+  }
 
   /// Check if reasoning is enabled for given budget
   bool isReasoningEnabled(int? budget) {
@@ -211,6 +244,9 @@ class MessageGenerationService {
     final mcpRouteSnapshot = generationController.captureMcpToolRoutes(
       assistant,
     );
+    // Bind the workspace before assembling tools so the model sees the
+    // workspace toolset for this generation (rikkahub-style agent loop).
+    await _syncWorkspaceBinding(settings);
     final toolDefs = generationController.buildToolDefinitions(
       settings,
       assistant,
@@ -218,7 +254,7 @@ class MessageGenerationService {
       modelId,
       hasBuiltInSearch,
       mcpRouteSnapshot: mcpRouteSnapshot,
-      workspaceToolsEnabled: _workspaceToolsEnabled,
+      workspaceToolsEnabled: generationController.workspaceToolsEnabled,
     );
     final sandboxDataFiles = BuiltInToolsHelper.sendsDataFilesToSandbox(
       cfg: cfg,

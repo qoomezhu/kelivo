@@ -12,6 +12,7 @@ import '../../../core/models/assistant_regex.dart';
 import '../services/message_builder_service.dart';
 import '../services/ask_user_interaction_service.dart';
 import '../services/tool_handler_service.dart';
+import '../../../core/services/workspace/tools.dart';
 import '../services/tool_approval_service.dart';
 import 'chat_controller.dart';
 import 'stream_controller.dart' as stream_ctrl;
@@ -122,6 +123,19 @@ class GenerationController {
   McpToolRouteSnapshot captureMcpToolRoutes(Assistant? assistant) {
     return toolHandlerService.captureMcpToolRoutes(assistant);
   }
+
+  /// Bind a workspace's tools to this session (rikkahub-style Linux
+  /// workspace). Pass null to detach.
+  void bindWorkspace(WorkspaceTools? tools,
+      {Map<String, bool> approvalOverrides = const {}}) {
+    toolHandlerService.bindWorkspace(tools,
+        approvalOverrides: approvalOverrides);
+  }
+
+  /// Whether the bound workspace tools should be advertised to the model.
+  bool get workspaceToolsEnabled => _workspaceToolsEnabled;
+  bool _workspaceToolsEnabled = false;
+  set workspaceToolsEnabled(bool value) => _workspaceToolsEnabled = value;
 
   /// Prepare tool definitions for API call.
   /// Delegates to ToolHandlerService.buildToolDefinitions.

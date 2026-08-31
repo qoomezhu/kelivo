@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/providers/settings_provider.dart';
 import '../../../core/providers/workspace_provider.dart';
 import '../../../core/services/workspace/models.dart';
 
-/// Workspace management page: list, create, delete, install rootfs.
+/// Workspace management page: enable the agent workspace, pick the active
+/// root, create/delete workspaces, install/uninstall the rootfs.
 ///
 /// UI follows kelivo's settings page conventions (SectionCard + list rows).
 class WorkspacePage extends StatefulWidget {
@@ -81,7 +83,30 @@ class _WorkspacePageState extends State<WorkspacePage> {
     }
   }
 
+  Future<void> _uninstallRootfs(Workspace ws) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('卸载 Rootfs'),
+        content: Text('「${ws.name}」的 Rootfs 将被删除，文件区保留。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('卸载'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await context.read<WorkspaceProvider>().uninstallRootfs(ws.id);
+  }
+
   Future<void> _deleteWorkspace(Workspace ws) async {
+    final settings = context.read<SettingsProvider>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -106,11 +131,16 @@ class _WorkspacePageState extends State<WorkspacePage> {
     );
     if (confirmed != true) return;
     await context.read<WorkspaceProvider>().delete(ws.id);
+    // 清掉引用，避免 settings 指向已删除的 root
+    if (settings.workspaceActiveRoot == ws.root) {
+      await settings.setWorkspaceActiveRoot(null);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkspaceProvider>();
+    final settings = context.watch<SettingsProvider>();
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -131,6 +161,20 @@ class _WorkspacePageState extends State<WorkspacePage> {
                 ),
           ),
           const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            title: const Text('启用工作区 Agent'),
+            subtitle: const Text('会话中暴露 workspace_read/write/edit/shell 工具'),
+            value: settings.workspaceAgentEnabled,
+            onChanged: (v) => settings.setWorkspaceAgentEnabled(v),
+          ),
+          const SizedBox(height: 8),
+          if (settings.workspaceAgentEnabled)
+            Text(
+              "当前工作区: ${settings.workspaceActiveRoot ?? '（未选择）'}",
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+            ),
+          const SizedBox(height: 8),
           if (provider.workspaces.isEmpty)
             Card(
               child: Padding(
@@ -140,17 +184,27 @@ class _WorkspacePageState extends State<WorkspacePage> {
                     Icon(Icons.folder_open,
                         size: 40, color: cs.onSurfaceVariant),
                     const SizedBox(height: 8),
-                    Text('还没有工作区', style: TextStyle(color: cs.onSurfaceVariant)),
+                    Text('还没有工作区',
+                        style: TextStyle(color: cs.onSurfaceVariant)),
                   ],
                 ),
               ),
             )
           else
-            ...provider.workspaces.map((ws) => _WorkspaceCard(
-                  workspace: ws,
-                  onInstall: () => _installRootfs(ws),
-                  onDelete: () => _deleteWorkspace(ws),
-                )),
+            ...provider.workspaces.map(
+              (ws) => _WorkspaceCard(
+                workspace: ws,
+                isActive: settings.workspaceActiveRoot == ws.root,
+                canActivate:
+                    settings.workspaceAgentEnabled &&
+                    ws.shellStatus == WorkspaceShellStatus.ready,
+                onActivate: () =>
+                    settings.setWorkspaceActiveRoot(ws.root),
+                onInstall: () => _installRootfs(ws),
+                onUninstall: () => _uninstallRootfs(ws),
+                onDelete: () => _deleteWorkspace(ws),
+              ),
+            ),
         ],
       ),
     );
@@ -160,12 +214,20 @@ class _WorkspacePageState extends State<WorkspacePage> {
 class _WorkspaceCard extends StatelessWidget {
   const _WorkspaceCard({
     required this.workspace,
+    required this.isActive,
+    required this.canActivate,
+    required this.onActivate,
     required this.onInstall,
+    required this.onUninstall,
     required this.onDelete,
   });
 
   final Workspace workspace;
+  final bool isActive;
+  final bool canActivate;
+  final VoidCallback onActivate;
   final VoidCallback onInstall;
+  final VoidCallback onUninstall;
   final VoidCallback onDelete;
 
   @override
@@ -215,7 +277,16 @@ class _WorkspaceCard extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                if (workspace.shellStatus != WorkspaceShellStatus.ready)
+                if (workspace.shellStatus == WorkspaceShellStatus.ready)
+                  FilledButton.tonalIcon(
+                    onPressed: canActivate && !isActive ? onActivate : null,
+                    icon: Icon(
+                      isActive ? Icons.check_circle : Icons.play_arrow,
+                      size: 18,
+                    ),
+                    label: Text(isActive ? '使用中' : '设为当前'),
+                  )
+                else
                   FilledButton.tonalIcon(
                     onPressed: workspace.shellStatus ==
                             WorkspaceShellStatus.installing
@@ -224,13 +295,13 @@ class _WorkspaceCard extends StatelessWidget {
                     icon: const Icon(Icons.download, size: 18),
                     label: const Text('安装 Rootfs'),
                   ),
-                if (workspace.shellStatus == WorkspaceShellStatus.ready)
-                  FilledButton.tonalIcon(
-                    onPressed: null,
-                    icon: const Icon(Icons.check, size: 18),
-                    label: const Text('已就绪'),
-                  ),
                 const Spacer(),
+                if (workspace.shellStatus == WorkspaceShellStatus.ready)
+                  IconButton(
+                    onPressed: onUninstall,
+                    icon: const Icon(Icons.layers_clear, size: 20),
+                    tooltip: '卸载 Rootfs',
+                  ),
                 IconButton(
                   onPressed: onDelete,
                   icon: Icon(Icons.delete_outline, color: cs.error),

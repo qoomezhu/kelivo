@@ -139,6 +139,8 @@ class SettingsProvider extends ChangeNotifier {
   static const String _memoryPromptLangKey = 'memory_prompt_lang_v1';
   static const String _memoryTraceEnabledKey = 'memory_trace_enabled_v1';
   static const String _legacyMemoryModeKey = 'memory_legacy_mode_v1';
+  static const String _workspaceEnabledKey = 'workspace_agent_enabled_v1';
+  static const String _workspaceActiveRootKey = 'workspace_agent_active_root_v1';
   static const String _legacyMemoryPromptZhKey = 'memory_legacy_prompt_zh_v1';
   static const String _legacyMemoryPromptEnKey = 'memory_legacy_prompt_en_v1';
   static const String _memoryRulesPromptZhKey = 'memory_rules_prompt_zh_v1';
@@ -975,6 +977,8 @@ class SettingsProvider extends ChangeNotifier {
     _memoryTraceEnabled = prefs.getBool(_memoryTraceEnabledKey) ?? true;
     MemoryTraceRecorder.instance.setEnabled(_memoryTraceEnabled);
     _legacyMemoryMode = prefs.getBool(_legacyMemoryModeKey) ?? false;
+    _workspaceAgentEnabled = prefs.getBool(_workspaceEnabledKey) ?? false;
+    _workspaceActiveRoot = prefs.getString(_workspaceActiveRootKey);
     _legacyMemoryPromptZh = _nonEmptyOr(
       prefs.getString(_legacyMemoryPromptZhKey),
       MemoryPrompts.legacyRulesZh,
@@ -4001,6 +4005,33 @@ Requirements:
 
   bool _legacyMemoryMode = false;
   bool get legacyMemoryMode => _legacyMemoryMode;
+
+  // rikkahub-style Linux workspace for the agent loop.
+  bool _workspaceAgentEnabled = false;
+  bool get workspaceAgentEnabled => _workspaceAgentEnabled;
+
+  Future<void> setWorkspaceAgentEnabled(bool value) async {
+    if (_workspaceAgentEnabled == value) return;
+    _workspaceAgentEnabled = value;
+    notifyListeners();
+    final prefs = _preferences;
+    await prefs.setBool(_workspaceEnabledKey, value);
+  }
+
+  String? _workspaceActiveRoot;
+  String? get workspaceActiveRoot => _workspaceActiveRoot;
+
+  Future<void> setWorkspaceActiveRoot(String? value) async {
+    if (_workspaceActiveRoot == value) return;
+    _workspaceActiveRoot = value;
+    notifyListeners();
+    final prefs = _preferences;
+    if (value == null) {
+      await prefs.remove(_workspaceActiveRootKey);
+    } else {
+      await prefs.setString(_workspaceActiveRootKey, value);
+    }
+  }
 
   String _legacyMemoryPromptZh = MemoryPrompts.legacyRulesZh;
   String get legacyMemoryPromptZh => _legacyMemoryPromptZh;
