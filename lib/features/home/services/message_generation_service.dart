@@ -91,6 +91,11 @@ class MessageGenerationService {
   final stream_ctrl.StreamController streamController;
   final BuildContext contextProvider;
 
+  /// Whether the bound workspace tools are exposed to the model in this
+  /// generation. Set by the chat UI when a workspace is attached.
+  bool _workspaceToolsEnabled = false;
+  set workspaceToolsEnabled(bool value) => _workspaceToolsEnabled = value;
+
   // Callbacks for UI updates (set by home_page)
   OnMessagesChanged? onMessagesChanged;
   OnConversationLoadingChanged? onConversationLoadingChanged;
@@ -213,6 +218,7 @@ class MessageGenerationService {
       modelId,
       hasBuiltInSearch,
       mcpRouteSnapshot: mcpRouteSnapshot,
+      workspaceToolsEnabled: _workspaceToolsEnabled,
     );
     final sandboxDataFiles = BuiltInToolsHelper.sendsDataFilesToSandbox(
       cfg: cfg,

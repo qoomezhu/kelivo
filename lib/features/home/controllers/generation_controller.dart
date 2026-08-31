@@ -132,6 +132,7 @@ class GenerationController {
     String modelId,
     bool hasBuiltInSearch, {
     McpToolRouteSnapshot? mcpRouteSnapshot,
+    bool workspaceToolsEnabled = false,
   }) {
     return toolHandlerService.buildToolDefinitions(
       settings,
@@ -141,6 +142,7 @@ class GenerationController {
       hasBuiltInSearch,
       isToolModel: isToolModel,
       mcpRouteSnapshot: mcpRouteSnapshot,
+      workspaceToolsEnabled: workspaceToolsEnabled,
     );
   }
 

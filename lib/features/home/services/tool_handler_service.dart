@@ -22,6 +22,7 @@ import 'ask_user_interaction_service.dart';
 import 'built_in_tool_names.dart';
 import 'local_tools_service.dart';
 import 'tool_approval_service.dart';
+import '../../../core/services/workspace/tools.dart';
 
 /// 工具调用处理服务
 ///
@@ -34,6 +35,17 @@ class ToolHandlerService {
 
   /// Build context (used for accessing providers)
   final BuildContext contextProvider;
+
+  /// Bound workspace tools dispatcher, if a workspace is attached.
+  WorkspaceTools? _workspaceTools;
+  Map<String, bool> _workspaceApprovalOverrides = const {};
+
+  /// Bind a workspace so its tools become callable in this session.
+  void bindWorkspace(WorkspaceTools? tools,
+      {Map<String, bool> approvalOverrides = const {}}) {
+    _workspaceTools = tools;
+    _workspaceApprovalOverrides = approvalOverrides;
+  }
 
   // ============================================================================
   // Tool Schema Sanitization
@@ -233,6 +245,7 @@ class ToolHandlerService {
     bool hasBuiltInSearch, {
     required bool Function(String providerKey, String modelId) isToolModel,
     McpToolRouteSnapshot? mcpRouteSnapshot,
+    bool workspaceToolsEnabled = false,
   }) {
     final List<Map<String, dynamic>> toolDefs = <Map<String, dynamic>>[];
     final supportsTools = isToolModel(providerKey, modelId);
@@ -270,6 +283,11 @@ class ToolHandlerService {
         supportsTools: supportsTools,
       ),
     );
+
+    // Workspace tools (rikkahub-style Linux workspace)
+    if (supportsTools && workspaceToolsEnabled) {
+      toolDefs.addAll(WorkspaceTools.toolDefinitions());
+    }
 
     // MCP tools
     final mcpTools = _buildMcpToolDefinitions(
@@ -504,6 +522,38 @@ class ToolHandlerService {
       try {
         if (routes.containsExposedName(name)) {
           return await approveAndExecuteMcp(name, args, toolCallId: toolCallId);
+        }
+
+        // Workspace tools (rikkahub-style Linux workspace)
+        if (WorkspaceTools.toolNames.contains(name) &&
+            _workspaceTools != null) {
+          if (name == 'workspace_shell' &&
+              approvalService != null &&
+              WorkspaceTools.resolveToolApproval(
+                  name, _workspaceApprovalOverrides)) {
+            final approval = await approvalService.requestApproval(
+              toolCallId: approvalIdFor(name, toolCallId),
+              toolName: name,
+              arguments: args,
+              conversationId: conversationId,
+            );
+            if (!approval.approved) {
+              return _toolError(
+                error: 'approval_denied',
+                message: approval.denyReason ?? 'User denied the tool call',
+                tool: name,
+              );
+            }
+          }
+          try {
+            return await _workspaceTools!.handleToolCall(name, args);
+          } catch (e) {
+            return _toolError(
+              error: 'workspace_tool_failed',
+              message: e.toString(),
+              tool: name,
+            );
+          }
         }
 
         // Search tool

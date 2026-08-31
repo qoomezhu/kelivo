@@ -7,6 +7,7 @@ import '../../model/pages/default_model_page.dart';
 import '../../provider/pages/providers_page.dart';
 import 'display_settings_page.dart';
 import '../../mcp/pages/mcp_page.dart';
+import '../../workspace/pages/workspace_page.dart';
 import '../../assistant/pages/assistant_settings_page.dart';
 import 'about_page.dart';
 import 'memory_settings_page.dart';
@@ -249,6 +250,19 @@ class SettingsPage extends StatelessWidget {
                   Navigator.of(
                     context,
                   ).push(MaterialPageRoute(builder: (_) => const McpPage()));
+                },
+              ),
+              _iosDivider(context),
+              _iosNavRow(
+                context,
+                icon: Lucide.Folder,
+                label: '工作区',
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WorkspacePage(),
+                    ),
+                  );
                 },
               ),
               _iosDivider(context),
