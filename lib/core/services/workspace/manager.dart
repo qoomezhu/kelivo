@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'filesystem.dart';
 import 'rootfs_installer.dart';
+import 'ish_runner.dart';
+import 'platform_ish_channel.dart';
 import 'models.dart';
 
 /// Port of rikkahub's WorkspaceManager.
@@ -19,7 +21,7 @@ class WorkspaceManager implements WorkspaceManagerLike {
     this.config = const WorkspaceConfig(),
     WorkspaceShellRunner? shellRunner,
     this.bindMounts = const [],
-  })  : _shellRunner = shellRunner ?? HostShellRunner(),
+  })  : _shellRunner = shellRunner ?? defaultShellRunner(),
         fileSystem = WorkspaceFileSystem() {
     baseDir.createSync(recursive: true);
   }
@@ -420,4 +422,17 @@ class ProcessRunner {
     final remaining = maxChars - buf.length;
     if (remaining > 0) buf.write(chunk.substring(0, remaining));
   }
+}
+
+/// 按平台选择默认执行器。
+/// iOS：嵌入的 iSH 内核；桌面：宿主 shell；Android：待接 proot。
+WorkspaceShellRunner defaultShellRunner() {
+  if (Platform.isIOS) {
+    final channel = PlatformIshChannel();
+    return IshShellRunner(
+      channel: channel,
+      outputStream: channel.onOutput,
+    );
+  }
+  return HostShellRunner();
 }
