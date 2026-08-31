@@ -29,11 +29,33 @@ class WorkspaceRootfsInstaller {
   static const int _bufferSize = 64 * 1024;
   static const int _progressStepBytes = 512 * 1024;
 
-  /// Default Alpine mini rootfs. aarch64 targets iOS/Android ARM devices;
-  /// desktop hosts should pass an x86_64 URL instead.
+  /// Default Alpine mini rootfs URLs per architecture.
+  ///
+  /// - Android: aarch64 (device arch, proot does no instruction translation)
+  /// - iOS: x86_64 (iSH emulates x86; aarch64 binaries cannot run) — and the
+  ///   root must be fakefs format, so prefer [ishRootUrl] there.
+  /// - Desktop: host arch.
   static const String alpineAarch64Url =
       'https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/aarch64/'
       'alpine-minirootfs-3.21.3-aarch64.tar.gz';
+
+  static const String alpineX86_64Url =
+      'https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86_64/'
+      'alpine-minirootfs-3.21.3-x86_64.tar.gz';
+
+  /// iSH official App Store root (fakefs layout, x86 userspace).
+  static const String ishRootUrl =
+      'https://github.com/ish-app/roots/releases/download/'
+      'g00712ff0a54b2839c5aa1a8ed758003ca65357dc/appstore-apk.tar.gz';
+
+  /// Pick the default rootfs URL for the current platform.
+  static String defaultRootfsUrl() {
+    if (Platform.isIOS) return ishRootUrl;
+    if (Platform.isAndroid) return alpineAarch64Url;
+    if (Platform.isMacOS) return alpineX86_64Url;
+    // Linux/Windows desktop: prefer host arch via an injectable override.
+    return alpineX86_64Url;
+  }
 
   Future<void> install(
     String root,

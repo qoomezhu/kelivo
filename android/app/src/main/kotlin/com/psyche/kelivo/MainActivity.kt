@@ -42,11 +42,15 @@ class MainActivity : FlutterActivity() {
      @Volatile private var writableFileState = WritableFileState.IDLE
      private val writableFileExecutor = Executors.newSingleThreadExecutor()
      private var deviceLocalToolsHandler: DeviceLocalToolsHandler? = null
+    private var prootHandler: ProotHandler? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
          super.configureFlutterEngine(flutterEngine)
          McpOAuthHandler.configure(this, flutterEngine.dartExecutor.binaryMessenger)
          deviceLocalToolsHandler = DeviceLocalToolsHandler(this).also {
+             it.configure(flutterEngine.dartExecutor.binaryMessenger)
+         }
+         prootHandler = ProotHandler(this).also {
              it.configure(flutterEngine.dartExecutor.binaryMessenger)
          }
         processTextChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, processTextChannelName)

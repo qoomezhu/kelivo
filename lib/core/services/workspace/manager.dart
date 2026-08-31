@@ -6,6 +6,7 @@ import 'filesystem.dart';
 import 'rootfs_installer.dart';
 import 'ish_runner.dart';
 import 'platform_ish_channel.dart';
+import 'platform_proot_channel.dart';
 import 'models.dart';
 
 /// Port of rikkahub's WorkspaceManager.
@@ -433,6 +434,9 @@ WorkspaceShellRunner defaultShellRunner() {
       channel: channel,
       outputStream: channel.onOutput,
     );
+  }
+  if (Platform.isAndroid) {
+    return androidProotRunner();
   }
   return HostShellRunner();
 }
